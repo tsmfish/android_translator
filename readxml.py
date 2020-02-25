@@ -15,25 +15,30 @@ SCOPES = ['https://www.googleapis.com/auth/spreadsheets',
           'https://www.googleapis.com/auth/drive']
 # SCOPES = ['https://www.googleapis.com/auth/drive']
 
-FILE_HEADER = '<resources>'
-FILE_FOOTER = '</resources>'
 FILE_STRING_FORMAT = '    <string name="%s">%s</string>'
 SPREADSHEET_ID = '1DqZh4PzfZ89L1J3QY99zYB0d54hv_QDGAFLiVvVOIow'
-RANGE_KEYS = 'Data!A2:A'
-RANGE_VALUES = 'Data!%s2:%s'
-RANGE_LANGUAGES = 'Data!B1:1'
-XML_FILE_NAME = 'strings.xml'
-RE_KEY_PAIR_STRING = re.compile(r'<string\s+name="([^"]+)(?!translatable\s*=\s*"false")">(.{1,}?)</string>',
+# SPREADSHEET_ID = '1-RsjRGU0U551-xneX_Mom4AnQw5PDILigXHd2kIoQzg'
+RANGE_VALUES = 'Data!%s:%s'
+RE_KEY_PAIR_STRING = re.compile(r'<string\s+name="([^"]+)(?!translatable\s*=\s*"false")">(.+?)</string>',
                                 flags=re.IGNORECASE | re.MULTILINE)
 RE_TRANSLATABLE = re.compile(r'\btranslatable\s*=\s*"false"\b', flags=re.IGNORECASE)
 
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-f', '--xml',
+    parser.add_argument('-f', '--files',
                         type=argparse.FileType('r'),
-                        default="strings.xml",
+                        nargs='+',
+                        default="strings_ru.xml",
                         help="Input file, <strings.xml> as default")
+    parser.add_argument('-d', '--documents',
+                        type=str,
+                        default=SPREADSHEET_ID,
+                        help="document id")
+    parser.add_argument('-c', '--clear',
+                        default=False,
+                        action="store_true",
+                        help="clear other lang")
 
     return parser.parse_args()
 
@@ -66,45 +71,51 @@ def main():
     # Call the Sheets API
     sheet = service.spreadsheets()
     args = get_args()
-    input_text = open(args.xml.name, 'r').read()
-    languages = sheet.values().get(spreadsheetId=SPREADSHEET_ID,
-                                   range=RANGE_LANGUAGES,
-                                   majorDimension="COLUMNS").execute().get('values', [])
-    keys, values = [], []
-    for (key, value) in sorted(re.findall(RE_KEY_PAIR_STRING, input_text)):
-        # print("parsed: {[%s]:[%s]}" % (key, value))
-        keys.append(key)
-        values.append(value)
 
-    if len(keys) > 0:
-        # clean values in languages column
-        current_value_column = 'B'
-        if len(languages) > 0:
-            for __ in languages:
-                values_range = RANGE_VALUES % (current_value_column, current_value_column)
-                # print(values_range)
-                sheet.values().clear(spreadsheetId=SPREADSHEET_ID, range=values_range).execute()
-                current_value_column = chr(ord(current_value_column) + 1)
+    # keys, values = [], []
+    dictionary, result, keys = {}, {}, {}
+    for file in args.files:
+        try:
+            # print('file [%s]' % file.name)
+            input_text = open(file.name, 'r').read()
+            dictionary[file.name] = {}
+            for (key, value) in sorted(re.findall(RE_KEY_PAIR_STRING, input_text)):
+                # print("parsed: {[%s]:[%s]}" % (key, value))
+                dictionary[file.name][key] = value
+                keys[key] = ""
+        except IOError:
+            pass
 
-        # clear key values
-        sheet.values().clear(spreadsheetId=SPREADSHEET_ID, range=RANGE_KEYS).execute()
+    for key in sorted(keys.keys()):
+        result.setdefault('.name', []).append(key)
+        for file in dictionary.keys():
+            if key in dictionary[file].keys():
+                result.setdefault(file, []).append(dictionary[file][key])
+            else:
+                result.setdefault(file, []).append("")
+    # print(result)
 
-        # english column
-        values_range = RANGE_VALUES % ('B', 'B')
-        update_body = {'valueInputOption': 'RAW',
-                       'data': [{
-                           'range': RANGE_KEYS,
-                           'majorDimension': 'COLUMNS',
-                           'values': [keys]
-                       }, {
-                           'range': values_range,
-                           'majorDimension': 'COLUMNS',
-                           'values': [values]
-                       }]
-                       }
-        # print(json.dumps(update_body))
-        print(sheet.values().batchUpdate(spreadsheetId=SPREADSHEET_ID, body=update_body)
-              .execute())
+    if len(dictionary) > 0:
+        current_value_column = 'A'
+        for key in result.keys():
+            # clean values in languages column
+            values_range = RANGE_VALUES % (current_value_column, current_value_column)
+            # print(values_range)
+            sheet.values().clear(spreadsheetId=SPREADSHEET_ID, range=values_range).execute()
+
+            update_list = [key]
+            update_list.extend(result[key])
+            # print(update_list)
+            update_body = {'valueInputOption': 'RAW',
+                           'data': [{
+                               'range': values_range,
+                               'majorDimension': 'COLUMNS',
+                               'values': [update_list]
+                           }]
+                           }
+            # print(json.dumps(update_body))
+            print(sheet.values().batchUpdate(spreadsheetId=SPREADSHEET_ID, body=update_body).execute())
+            current_value_column = chr(ord(current_value_column) + 1)
 
 
 if __name__ == '__main__':

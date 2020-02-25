@@ -16,7 +16,8 @@ from googleapiclient.discovery import build
 SCOPES = ['https://www.googleapis.com/auth/drive']
 
 FILE_STRING_FORMAT = '    <string name="%s">%s</string>'
-SPREADSHEET_ID = '1DqZh4PzfZ89L1J3QY99zYB0d54hv_QDGAFLiVvVOIow'
+# SPREADSHEET_ID = '1DqZh4PzfZ89L1J3QY99zYB0d54hv_QDGAFLiVvVOIow'
+SPREADSHEET_ID = '1-RsjRGU0U551-xneX_Mom4AnQw5PDILigXHd2kIoQzg'
 RANGE_KEYS = 'Data!A2:A'
 RANGE_VALUES = 'Data!%s2:%s'
 RANGE_LANGUAGES = 'Data!B1:1'
@@ -33,6 +34,10 @@ def get_args():
                         type=argparse.FileType('r'),
                         default="strings.xml",
                         help="XML files wheel write into language/<file name/string.xml as default>")
+    parser.add_argument('-d', '--documents',
+                        type=str,
+                        default="1DqZh4PzfZ89L1J3QY99zYB0d54hv_QDGAFLiVvVOIow",
+                        help="document id")
 
     return parser.parse_args()
 
